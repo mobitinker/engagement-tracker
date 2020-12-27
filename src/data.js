@@ -10,7 +10,7 @@ import BorderOuter from "@material-ui/icons/BorderOuter";
 const data = {
   menus: [
     { text: "DashBoard", icon: <Assessment />, link: "/dashboard" },
-    { text: "GBE Zoom Summary", icon: <BorderOuter />, link: "/reports/gbezoomsummary" },
+    { text: "Zoom Summary", icon: <BorderOuter />, link: "/reports/zoomsummary" },
     /*
     { text: "Form Page", icon: <Web />, link: "/form" },
     

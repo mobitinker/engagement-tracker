@@ -18,7 +18,7 @@ import DateFnsUtils from '@date-io/date-fns';
 import { MuiPickersUtilsProvider, KeyboardDatePicker,} from '@material-ui/pickers';
 import dataAccess from "../dataAccess.js";
 import Donut from "../components/Donut.js";
-import {zoomTimesShort, gbeStaff} from "../config.js";
+import {schools, staff} from "../config.js";
 
 /*
 const useStyles = makeStyles((theme) => ({
@@ -33,7 +33,6 @@ const useStyles = makeStyles((theme) => ({
 
 const classes = useStyles();
 */
-
 const dayjs = require('dayjs');
 var utc = require('dayjs/plugin/utc') // dependent on utc plugin
 var timezone = require('dayjs/plugin/timezone')
@@ -41,20 +40,24 @@ dayjs.extend(utc)
 dayjs.extend(timezone)
 
 // Return the bucket positions for the meeting at startTimeUTC
-function GBEZoomNumber(startTimeUTC, firstReportDateUTC) {
-  var result = {day: -1, zoom: -1};
-  const t = dayjs(startTimeUTC).tz("America/Los_Angeles");     //Local 
-  const startTime = (t.hour() * 60) + (t.minute());    // in minutes from midnight
+function getZoomNumber(startTimeUTC, firstReportDateUTC, hostDuration, zoomTimes) {
 
-  // ["08:30", "09:30", "13:30", "14:30"];   
-  const zt = [510, 570, 810, 870];  
-  var diff;
+  var result = {day: -1, zoom: -1}; // initialize result
+  const t = dayjs(startTimeUTC).tz("America/Los_Angeles");     //TODO Local 
+  const startTime = (t.hour() * 60) + (t.minute());    // in minutes from midnight
+  const endTime = startTime + (hostDuration / 60);
+
+  // TODO remove 
+  // var diff;
   // Figure the zoom index
-  for (var i = 0; i < zt.length; i++) {
-      diff = startTime - zt[i];
-      if ( (diff >= -5) && (diff <= 15) ) { // Meeting started 5 min early to 15 min late from scheduled time
+  for (var i = 0; i < zoomTimes.length; i++) {
+      //diff = startTime - zoomTimes[i];
+      //if ( (diff >= -5) && (diff <= 15) ) { // Meeting started 5 min early to 15 min late from scheduled time
+      // Better? Meeting started 15 minutes late or earlier and ended at least 5 minutes after the scheduled start time
+      if ( (startTime <= zoomTimes[i] + 15 ) && ( endTime >= zoomTimes[i] + 5) ) { 
           result.zoom = i;
       }
+      //todo handle Friday in more accurate way
       if (t.format("d") === "5" ) {  //special case of Friday
           if ((startTime >= 505 && (startTime <= 625 ))) { // 8:25 to 10:25
             result.zoom = 4;      // it's the Friday 8:30
@@ -66,7 +69,7 @@ function GBEZoomNumber(startTimeUTC, firstReportDateUTC) {
 }
 
 // transform the meeting data
-function createGBESummary(host, startDate, endDate, meetings) {
+function createSummary(host, zoomTimes, startDate, endDate, meetings) {
   
   var pList = [];
 
@@ -76,9 +79,9 @@ function createGBESummary(host, startDate, endDate, meetings) {
   // Do data transformation to show minutes spent in each available Zoom by day
   meetings.forEach((m) => {
 
-      var hostDuration = m.participants[0].duration;
+      var hostDuration = m.duration;  // Note: host joins should add up to near this number. Worse connection means greater diff
 
-      var pos = GBEZoomNumber(m.start_time, startDateUTC);
+      var pos = getZoomNumber(m.start_time, startDateUTC, hostDuration, zoomTimes);
       m.pos = pos;
       var participants = m.participants;
 
@@ -86,12 +89,12 @@ function createGBESummary(host, startDate, endDate, meetings) {
         // This is an instructional meeting so scan the particpants
         participants.forEach((p) => {
           var found;
+          
           if (pList.length > 0) {
               found = pList.find((e) => e.name === p.name);
           }
-          if (found) {  //It was found
-              //TODO refactor
-              found.days[pos.day].zooms[pos.zoom].duration += p.duration; // Add to number of minutes
+          if (found) {  //It was found, so add to participation data
+              found.days[pos.day].zooms[pos.zoom].duration += p.duration; // Add to number of seconds
               found.days[pos.day].zooms[pos.zoom].hostDuration = hostDuration; // Set host duration 
               found.days[pos.day].zooms[pos.zoom].joins += 1; 
           } else {
@@ -101,7 +104,7 @@ function createGBESummary(host, startDate, endDate, meetings) {
               pNew.days = new Array(numDays);
               for (var i=0; i<numDays;i++){
                   const a = [
-                    // item for each possible Zoom in GBE day
+                    // item for each possible Zoom in day
                     {duration: 0, hostDuration: -1, joins: 0},
                     {duration: 0, hostDuration: -1, joins: 0},
                     {duration: 0, hostDuration: -1, joins: 0},
@@ -134,10 +137,11 @@ function createGBESummary(host, startDate, endDate, meetings) {
     return 0;
   }));
 
+
   // Take another pass through the participants to fill in hostDuration for all meetings
   meetings.forEach((m) => {
-    var hostDuration = m.participants[0].duration;
-    var pos = GBEZoomNumber(m.start_time, startDateUTC);
+    var hostDuration = m.duration;
+    var pos = getZoomNumber(m.start_time, startDateUTC, hostDuration, zoomTimes);
     try {
       sortedParticipants.forEach((p) => {
         if ((pos.zoom >= 0) && (pos.day >=0)) {
@@ -158,7 +162,7 @@ function createGBESummary(host, startDate, endDate, meetings) {
 }
 
 
-class GBEZoomSummary extends React.Component {
+class ZoomSummary extends React.Component {
   constructor(props) {
     super(props)
     
@@ -166,10 +170,12 @@ class GBEZoomSummary extends React.Component {
     this.state = {
       meetings: [],
       participants: [],
+      school: "GBE",
       host: "",
       endDate: dayjs().format("YYYY-MM-DD"),
       startDate: dayjs().add(-4, 'day').format("YYYY-MM-DD"),
       numDays: 5,
+      loading: false
       }
   }
     
@@ -177,12 +183,13 @@ class GBEZoomSummary extends React.Component {
     // ? set loading and error states?
     // Create query
 
-    const {host, startDate, endDate} = this.state;
+    const {host, startMinutes, startDate, endDate} = this.state;
     
     if (host === "") {
       // Initial loading state
       return
     }
+    this.setState({...this.state, loading: true});
 
     var meetings;
 
@@ -191,16 +198,19 @@ class GBEZoomSummary extends React.Component {
     meetings = await dataAccess.meetingsFetch(query);
 
     if (meetings) {
-      const {numDays, participants} = createGBESummary(host, startDate, endDate, meetings);
+      const {numDays, participants} = createSummary(host, startMinutes, startDate, endDate, meetings);
       this.setState({...this.state, 
         participants: participants,
         meetings: meetings, 
-        numDays: numDays});
+        numDays: numDays,
+        loading: false
+      });
     } else {
       this.setState({...this.state,
         participants: [],
         meetings: [],
         numDays: 0,
+        loading: false
       });
     }
   }
@@ -221,20 +231,19 @@ class GBEZoomSummary extends React.Component {
 
   // Render each meeting with which scheduled session it is.
   renderMeetingList() {
-    const { meetings } = this.state;
+    const { meetings, zoomTimesText } = this.state;
     var rows = [];
 
     if (meetings.length <= 0) return;
 
     rows.push(<h2 key={1001}>Meetings</h2>);
     rows.push(<p key={1002}></p>);
-    rows.push(<em key={1003}><p>All meetings hosted, with (est. class time) and duration for host.</p></em>);
+    rows.push(<em key={1003}><p>All meetings hosted, with (est. class time), duration for host and [id].</p></em>);
   
-    // Todo render as list
     meetings.forEach(m => {
       const meetingDate = dayjs(m.start_time).tz("America/Los_Angeles").format("ddd MM-DD hh:mm");
       const duration = Math.round(m.duration / 60);
-      const s = `${meetingDate} (${m.pos.zoom >= 0 ? zoomTimesShort[m.pos.zoom] : "other"}) for ${duration}m`;
+      const s = `${meetingDate} (${m.pos.zoom >= 0 ? zoomTimesText[m.pos.zoom] : "other"}) for ${duration}m. [${m.uuid}]`;
       rows.push(<p key={m.id}>{s}</p>);
     });
     return rows;
@@ -248,10 +257,27 @@ class GBEZoomSummary extends React.Component {
   }
 
   renderForm() {
-    const {host, startDate, endDate} = this.state;
+    const {school, host, startDate, endDate} = this.state;
+  
+    const schoolChange = (event) => {
+      const school = event.target.value;
+      this.setState({...this.state, 
+        school: school, 
+        host: "",
+        meetings: [],
+        participants: []
+      });
+    };
   
     const hostChange = (event) => {
-      this.setState({...this.state, host: event.target.value});
+      const host = event.target.value;
+      const staffMember = staff.find((e) => e.name === host);
+      const schoolName = staffMember ? staffMember.school : "GBE";  //TODO handle correctly
+      const school = schools.find((e) => e.name === schoolName);
+      this.setState({...this.state, 
+        host: host, 
+        startMinutes: school.startMinutes, 
+        zoomTimesText: school.zoomTimesText});
     };
   
     const startDateChange = (date) => {
@@ -264,31 +290,53 @@ class GBEZoomSummary extends React.Component {
       this.setState({...this.state, endDate: d});
     };
   
-    // - {host} {startDate} to {endDate}
-    var options = [];
-    options.push(<option key={"x"} value={""}>{""}</option>)
-    gbeStaff.forEach(s => {
+    // - {school} {host} {startDate} to {endDate}
+    const schoolOptions = [];
+    schools.forEach(s => {
       const opt = <option key={s.name} value={s.name}>{s.name}</option>
-      options.push(opt);
+      schoolOptions.push(opt);
     });
-    //todo <FormControl className={classes.formControl}>
+
+    var hostOptions = [];
+    const schoolStaff = staff.filter((s) => s.school === school);
+
+    hostOptions.push(<option key={"x2"} value={""}>{""}</option>)
+    schoolStaff.forEach(s => {
+      const opt = <option key={s.name} value={s.name}>{s.name}</option>
+      hostOptions.push(opt);
+    });
+
     return(
       <div>
          <Grid container justify="space-around">
-      <FormControl>
-        <InputLabel htmlFor="host-native-simple">Teacher</InputLabel>
-        <Select
-          native
-          value={host}
-          onChange={hostChange}
-          inputProps={{
-            name: 'host',
-            id: 'host-native-simple',
-          }}
-        >
-          {options}
-        </Select>
-      </FormControl>
+         <FormControl>
+            <InputLabel htmlFor="school-native-simple">School</InputLabel>
+            <Select
+              native
+              value={school}
+              onChange={schoolChange}
+              inputProps={{
+                name: 'school',
+                id: 'school-native-simple',
+              }}
+            >
+              {schoolOptions}
+            </Select>
+          </FormControl>
+          <FormControl>
+            <InputLabel htmlFor="host-native-simple">Teacher</InputLabel>
+            <Select
+              native
+              value={host}
+              onChange={hostChange}
+              inputProps={{
+                name: 'host',
+                id: 'host-native-simple',
+              }}
+            >
+              {hostOptions}
+            </Select>
+          </FormControl>
          <MuiPickersUtilsProvider utils={DateFnsUtils}>
            <KeyboardDatePicker
              disableToolbar
@@ -370,7 +418,7 @@ class GBEZoomSummary extends React.Component {
     }
 
     if (!p || this.state.numDays === 0) {
-      p = (<p>No meetings</p>);
+      p = (<p>No instructional meetings</p>);
       return (<TableRow key={p.name} hover={true}>
         <TableCell>No regular meetings found.</TableCell>
       </TableRow>)
@@ -400,7 +448,7 @@ class GBEZoomSummary extends React.Component {
           this.renderParticipant(p)
         ))}
     </TableBody>
-    </Table> : <p>No meetings found</p>}
+    </Table> : <p>No instructional meetings found</p>}
     {this.renderMeetingList()}
     </>      
     )         
@@ -423,11 +471,12 @@ class GBEZoomSummary extends React.Component {
 
 }
 
-GBEZoomSummary.propTypes = {
+ZoomSummary.propTypes = {
   meetings: PropTypes.array,
   host: PropTypes.string,
+  school: PropTypes.string,
   startDate: PropTypes.string,
   endDate: PropTypes.string
 }
 
-export default GBEZoomSummary;
+export default ZoomSummary;

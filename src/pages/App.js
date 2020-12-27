@@ -9,7 +9,7 @@ import RightDrawer from "../components/RightDrawer";
 import Data from "../data";
 import Dashboard from "./DashboardPage";
 import ButtonBase from "@material-ui/core/ButtonBase";
-import GBEZoomSummary from "./GBEZoomSummary";
+import ZoomSummary from "./ZoomSummary";
 import NotFound from "./NotFoundPage";
 import { ThemeProvider } from "@material-ui/core/styles";
 import defaultTheme, { customTheme } from "../theme";
@@ -118,7 +118,7 @@ class App extends React.Component {
           <Switch>
             <Route exact path="/" component={Dashboard} />
             <Route path="/dashboard" component={Dashboard} />
-            <Route path="/reports/gbezoomsummary" component={GBEZoomSummary} />
+            <Route path="/reports/zoomsummary" component={ZoomSummary} />
             {/*}
             <Route path="/form" component={Form} />
             <Route path="/table/basic" component={BasicTable} />

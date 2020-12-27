@@ -6,14 +6,8 @@ class Donut extends React.Component {
 
   render() {
     const {participantDuration, hostDuration} = this.props; // in seconds
-    /*
-    if ((participantDuration === 0) && (hostDuration > 0)) {
-      console.log("Here here!");
-    }
-    */
     const hostMinutes = hostDuration / 60;
     const participantMinutes = participantDuration / 60;
-    //console.log(hostMinutes, participantMinutes, participantDuration);
     var tt = "";  // Tooltip
     try {
       const size = 22;
