@@ -138,16 +138,26 @@ function createSummary(host, zoomTimes, startDate, endDate, meetings) {
   }));
 
 
-  // Take another pass through the participants to fill in hostDuration for all meetings
+  // Take another pass through the participants to fill in hostDuration and stats for each
   meetings.forEach((m) => {
     var hostDuration = m.duration;
     var pos = getZoomNumber(m.start_time, startDateUTC, hostDuration, zoomTimes);
     try {
+      var didHost = false;
+      var totalDuration = 0;
+      var studentCount = 0;
       sortedParticipants.forEach((p) => {
         if ((pos.zoom >= 0) && (pos.day >=0)) {
           p.days[pos.day].zooms[pos.zoom].hostDuration = hostDuration; 
         }
+        if (didHost && (p.days[pos.day].zooms[pos.zoom].duration > 90)) {
+          totalDuration += p.days[pos.day].zooms[pos.zoom].duration;
+          studentCount += 1;
+        }
+        didHost = true;
       });
+      m.totalDuration = totalDuration;
+      m.studentCount = studentCount;
     }
     catch (err) {
       console.log(err);
@@ -243,7 +253,8 @@ class ZoomSummary extends React.Component {
     meetings.forEach(m => {
       const meetingDate = dayjs(m.start_time).tz("America/Los_Angeles").format("ddd MM-DD hh:mm");
       const duration = Math.round(m.duration / 60);
-      const s = `${meetingDate} (${m.pos.zoom >= 0 ? zoomTimesText[m.pos.zoom] : "other"}) for ${duration}m. [${m.uuid}]`;
+      const avgStudentDuration = Math.round(m.totalDuration / m.studentCount / 60);
+      const s = `${meetingDate} (${m.pos.zoom >= 0 ? zoomTimesText[m.pos.zoom] : "other"}) for ${duration}m. Avg student time: ${avgStudentDuration}m`;
       rows.push(<p key={m.id}>{s}</p>);
     });
     return rows;

@@ -1,6 +1,8 @@
 import React from "react";
 import Faker from "faker";
 import Assessment from "@material-ui/icons/Assessment";
+import Help from "@material-ui/icons/Help";
+
 //import GridOn from "@material-ui/icons/GridOn";
 //import PermIdentity from "@material-ui/icons/PermIdentity";
 //import Web from "@material-ui/icons/Web";
@@ -11,6 +13,7 @@ const data = {
   menus: [
     { text: "DashBoard", icon: <Assessment />, link: "/dashboard" },
     { text: "Zoom Summary", icon: <BorderOuter />, link: "/reports/zoomsummary" },
+    { text: "Help", icon: <Help />, link: "/helppage" },
     /*
     { text: "Form Page", icon: <Web />, link: "/form" },
     
