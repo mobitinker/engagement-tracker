@@ -10,6 +10,7 @@ import Data from "../data";
 import Dashboard from "./DashboardPage";
 import ButtonBase from "@material-ui/core/ButtonBase";
 import ZoomSummary from "./ZoomSummary";
+import HelpPage from "./HelpPage";
 import NotFound from "./NotFoundPage";
 import { ThemeProvider } from "@material-ui/core/styles";
 import defaultTheme, { customTheme } from "../theme";
@@ -119,6 +120,7 @@ class App extends React.Component {
             <Route exact path="/" component={Dashboard} />
             <Route path="/dashboard" component={Dashboard} />
             <Route path="/reports/zoomsummary" component={ZoomSummary} />
+            <Route path="/helppage" component={HelpPage} />
             {/*}
             <Route path="/form" component={Form} />
             <Route path="/table/basic" component={BasicTable} />
